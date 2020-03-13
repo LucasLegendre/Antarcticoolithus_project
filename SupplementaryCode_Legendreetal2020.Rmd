@@ -654,7 +654,7 @@ dataplot<-log10(dataplot)
 fit<-fastAnc(treeplot,dataplot,vars=T,CI=T) # Ancestral states for each node
 obj<-contMap(treeplot,dataplot,plot=F)
 
-plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))))
+plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), fsize=0.4,lwd=4)
 plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), type="fan", fsize=0.4,lwd=4)
 ```
 
@@ -664,12 +664,13 @@ treeplot<-force.ultrametric(treeplot)
 fit<-fastAnc(treeplot,dataplot,vars=T,CI=T) # Ancestral states for each node
 obj<-contMap(treeplot,dataplot,plot=F)
 
-plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))))
+plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), fsize=0.4,lwd=4)
 ```
 
 - For presence/absence of the prismatic layer, using 'make.simmap'
 ```{r}
 dataS<-read.table("Dataset2-amniotes.txt", header=T)
+dataS<-dataS[-95,]
 treeS<-read.nexus("Amniotetree.nex")
 treeS<-drop.tip(treeS, setdiff(treeS$tip.label, dataS$Taxon))
 prismatic<-dataS[,5]; names(prismatic)<-dataS$Taxon
@@ -687,13 +688,13 @@ null<-sapply(mtrees,plotSimmap,colors=cols,lwd=1,ftype="off")
 pd<-summary(mtrees); pd
 par(mfrow=c(1,1))
 plot(pd,fsize=0.6,ftype="i",colors=cols,ylim=c(-2,Ntip(treeS)))
-add.simmap.legend(colors=cols[2:1],prompt=FALSE,x=0,y=-4,vertical=FALSE)
+add.simmap.legend(colors=cols[2:1],prompt=FALSE,x=0,y=-2,vertical=FALSE)
 
 # density map of the above
 objprism<-densityMap(mtrees,states=levels(prismatic)[2:1],plot=FALSE)
 n<-length(objprism$cols)
 objprism$cols[1:n]<-colorRampPalette(c("royalblue","red3"))(n)
-plot(objprism,size=c(0.6,1))
+plot(objprism,size=c(0.6,1),fsize=0.6,lwd=4)
 ```
 
 
@@ -708,7 +709,7 @@ dataSboxplot<-dataS %>% filter(!Clade=="Test")
 ggplot(dataSboxplot, aes(x=Clade, y=log(RTM), fill=Clade)) + 
   geom_boxplot() +
   theme(panel.background = element_rect(fill="white")) +
-  theme(axis.text=element_text(size=6, angle = 90),
+  theme(axis.text=element_text(size=10, angle = 90),
         axis.title=element_text(size=15),
         legend.text=element_text(size=15),
         legend.title=element_text(size=17)) +

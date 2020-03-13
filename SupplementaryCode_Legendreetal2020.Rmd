@@ -1,0 +1,723 @@
+---
+title: "Supplementary code – Legendre et al. (2020)"
+author: "Lucas Legendre"
+date: "3/12/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(error = TRUE)
+knitr::opts_knit$set(root.dir = '/Users/lucasl/Desktop/DataLegendreetal2020/')
+
+# WARNING: edit the working directory above to your preferred folder
+```
+
+Compiled under R version 3.6.2 (2019-12-12)
+
+This document details all analyses performed in R for the study:
+Legendre, L. J., Rubilar-Rogers, D., Musser, G. M., Davis, S. N., Otero, R., Vargas, A. O., and Clarke, J. A. 2020. A giant soft-shelled egg from the Late Cretaceous of Antarctica. <i>Nature</i>.
+
+For more information regarding the study, datasets, and analyses, please refer to the Supplementary Information of this paper. If you have any additional questions, feel free to email me at <lucasjlegendre@gmail.com>.
+
+
+### Loading packages
+```{r}
+library(AICcmodavg)
+library(ape)
+library(caper)
+library(dplyr)
+library(evobiR)
+library(ggplot2)
+library(MPSEM)
+library(nlme)
+library(nortest)
+library(phylopath)
+library(phytools)
+library(RColorBrewer)
+```
+
+
+
+## 1 – Lepidosaur dataset
+
+This part requires the use of dataset 1 ("Dataset1-lepidosaurs.txt"; see also Supplementary Table 1 in Legendre et al., 2020), and lepidosaur phylogenetic tree ("Lepidosaurtree.trees.nex").
+
+- Loading the tree:
+```{r}
+tree<-read.nexus("Lepidosaurtree.trees.nex")
+```
+
+
+### Phylogenetic generalized least squares (PGLS)
+
+#### Egg volume ~ SVL (snout-vent length)
+
+- Loading the dataset and removing species with missing data
+```{r}
+data2<-read.table("Dataset1-lepidosaurs.txt", header=T); data2V<-subset(data2, !is.na(V)&!is.na(SVL))
+pruned.tree<-drop.tip(tree, setdiff(tree$tip.label, data2V$Species))
+data<-read.table("Dataset1-lepidosaurs.txt", header=T, row.names = "Species"); dataV<-subset(data, !is.na(V)&!is.na(SVL))
+```
+
+- Best fit for alpha parameter in OU (Ornstein-Uhlenbeck) model
+```{r}
+alpha <- seq(0, 1, 0.1)
+fit <- list()
+form <- log(V)~log(SVL)
+for (i in seq_along(alpha)) {
+  cor <- corMartins(alpha[i], phy = pruned.tree, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = data, na.action=na.exclude, method = "ML")
+}
+sapply(fit, logLik)
+```
+
+- Building PGLS models and running model selection using AICc
+```{r}
+BM<-gls(log(V)~log(SVL), data=dataV, correlation=corBrownian(phy=pruned.tree), method="ML")
+OU<-gls(log(V)~log(SVL), data=dataV, correlation=corMartins(1, phy=pruned.tree, fixed=T), method="ML")
+Lambda<-gls(log(V)~log(SVL), data=dataV, correlation=corPagel(1, phy=pruned.tree), method="ML")
+EB<-gls(log(V)~log(SVL), data=dataV, correlation=corBlomberg(0.1, phy=pruned.tree), method="ML")
+OLS<-gls(log(V)~log(SVL), data=dataV, method="ML")
+
+Cand.models = list()
+Cand.models[[1]] = BM
+Cand.models[[2]] = OU
+Cand.models[[3]] = Lambda
+Cand.models[[4]] = EB
+Cand.models[[5]] = OLS
+
+Modnames = paste(c("BM", "OU", "Lambda", "EB", "OLS"), sep = " ")
+aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
+summary(Lambda)
+```
+
+- Testing for normality
+```{r}
+plot(Lambda, resid(., type="n")~fitted(.), main="Normalized Residuals v Fitted Values",abline=c(0,0))
+res<-resid(Lambda, type="n")
+par(mar=c(5.1,4.1,4.1,2.1))
+qqnorm(res)
+qqline(res)
+lillie.test(residuals(Lambda))
+lillie.test(chol(solve(vcv(pruned.tree)))%*%residuals(Lambda))
+```
+
+- Removing outliers and building a new model without them
+```{r}
+which(res>4); which(res<(-2.5))
+newdata<-dataV[-c(89,168,222),]
+newdata2<-data2V[-c(89,168,222),]
+newtree<-drop.tip(pruned.tree, setdiff(pruned.tree$tip.label, newdata2$Species))
+
+Newlambda<-gls(log(V)~log(SVL), data=newdata, correlation=corPagel(1, phy=newtree), method="ML")
+summary(Newlambda)
+
+plot(Newlambda, resid(., type="n")~fitted(.), main="Normalized Residuals v Fitted Values",abline=c(0,0))
+res<-resid(Newlambda, type="n")
+par(mar=c(5.1,4.1,4.1,2.1))
+qqnorm(res)
+qqline(res)
+lillie.test(residuals(Newlambda))
+lillie.test(chol(solve(vcv(newtree)))%*%residuals(Newlambda))
+```
+
+- Estimating the pseudo R-squared using caper
+```{r}
+#newlambda:
+datacomp<-comparative.data(phy=newtree, data=newdata2, names.col="Species")
+pgls<-pgls(log(V)~log(SVL), data=datacomp, lambda="ML")
+summary(pgls)
+
+#lambda:
+datacompl<-comparative.data(phy=pruned.tree, data=data2V, names.col="Species")
+pgls<-pgls(log(V)~log(SVL), data=datacompl, lambda="ML")
+summary(pgls)
+```
+
+<i>Not much difference between the two models, assumptions of normality are not met in either of them – we use <b>lambda</b> instead of <b>newlambda</b> for the plot.</i>
+
+- Plot of the regression
+```{r}
+ggplot(dataV, aes(log(SVL), log(V), color=Suborder)) +
+geom_point(size=4) +
+  xlab("ln snout-vent length (mm)") +
+  ylab("ln egg volume (mm3)") +
+  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue", size=1.3) +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+        scale_colour_brewer("Suborder", palette="Accent")
+```
+
+- Estimating the SVL of <i>Antarcticoolithus</i> using the allometric equation of PGLS, including it in the dataset, then in the plot
+```{r}
+exp((-0.7990941/1.6708400)+(1/1.6708400)*log(5471405.789))
+
+data[1,7]<-6684.303
+dataV2<-subset(data, !is.na(V))
+
+ggplot(dataV2, aes(log(SVL), log(V), color=Suborder)) +
+  geom_point(size=4) +
+  xlab("ln snout-vent length (mm)") +
+  ylab("ln egg volume (mm3)") +
+  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue") +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Suborder", palette="Accent")
+```
+
+<i>Eggshell thickness ~ body mass is not detailed here, since the code is virtually identical – only variable names and regression coefficients for the plot and estimation are different.</i>
+
+- Estimating the body mass of <i>Antarcticoolithus</i> using the allometric equation of PGLS, including it in the dataset, then in the plot
+```{r}
+LambdaBM<-gls(log(V)~log(BM), data=dataV, correlation=corPagel(1, phy=pruned.tree), method="ML")
+summary(LambdaBM)
+
+exp(-(5.050557/0.619536)+(1/0.619536)*log(5471405.789))
+
+data[1,8]<-21657214
+dataV2<-subset(data, !is.na(V))
+
+ggplot(dataV2, aes(log(BM), log(V), color=Suborder)) +
+  geom_point(size=4) +
+  xlab("ln body mass (g)") +
+  ylab("ln egg volume (mm3)") +
+  geom_abline(intercept=5.050556, slope=0.619536, colour="lightblue") +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Suborder", palette="Set1")
+```
+
+
+#### Eggshell thickness ~ Egg volume
+
+- Removing species with missing data
+```{r}
+dataVT2<-subset(data2, !is.na(Thickness)&!is.na(V)); dataVT2<-dataVT2[-1,]
+pruned.treeVT<-drop.tip(tree, setdiff(tree$tip.label, dataVT2$Species))
+dataVT<-subset(data, !is.na(Thickness)&!is.na(V)); dataVT<-dataVT[-1,]
+```
+
+- Building PGLS models and running model selection using AICc
+```{r}
+BMVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corBrownian(phy=pruned.treeVT), method="ML")
+OUVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corMartins(1, phy=pruned.treeVT), method="ML")
+LambdaVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corPagel(1, phy=pruned.treeVT), method="ML")
+EBVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corBlomberg(0.1, phy=pruned.treeVT, fixed=T), method="ML")
+OLSVT<-gls(log(Thickness)~log(V), data=dataVT, method="ML")
+
+Cand.models = list()
+Cand.models[[1]] = BMVT
+Cand.models[[2]] = OUVT
+Cand.models[[3]] = LambdaVT
+Cand.models[[4]] = EBVT
+Cand.models[[5]] = OLSVT
+
+Modnames = paste(c("BMVT", "OUVT", "LambdaVT", "EBVT", "OLSVT"), sep = " ")
+aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
+summary(EBVT)
+```
+
+- Testing for normality
+```{r}
+lillie.test(residuals(EBVT))
+lillie.test(chol(solve(vcv(pruned.treeVT)))%*%residuals(EBVT))
+
+plot(EBVT, resid(., type="n")~fitted(.), main="Normalized Residuals v Fitted Values",abline=c(0,0))
+res<-resid(EBVT, type="n")
+par(mar=c(5.1,4.1,4.1,2.1))
+qqnorm(res)
+qqline(res)
+```
+
+
+- Removing outliers and building a new model without them
+```{r}
+which(res<(-2)); which(res>2.5)
+newdataVT<-dataVT[-c(19,45),]
+newdataVT2<-dataVT2[-c(19,45),]
+newtreeVT<-drop.tip(pruned.treeVT, c("Zootoca_vivipara_viviparous","Chamaeleo_senegalensis"))
+
+NewEBVT<-gls(log(Thickness)~log(V), data=newdataVT, correlation=corBlomberg(0.1, phy=newtreeVT, fixed=T), method="ML")
+summary(NewEBVT)
+
+plot(NewEBVT, resid(., type="n")~fitted(.), main="Normalized Residuals v Fitted Values",abline=c(0,0))
+res<-resid(NewEBVT, type="n")
+par(mar=c(5.1,4.1,4.1,2.1))
+qqnorm(res)
+qqline(res)
+lillie.test(residuals(NewEBVT))
+lillie.test(chol(solve(vcv(newtreeVT)))%*%residuals(NewEBVT))
+```
+
+- Plot of the regression
+```{r}
+NewEBVT$coefficients
+ggplot(newdataVT, aes(log(V), log(Thickness), color=Suborder)) +
+  geom_point(size=4) +
+  xlab("ln egg volume (mm3)") +
+  ylab("ln eggshell thickness (µm)") +
+  geom_abline(intercept=2.1246786, slope=0.3209485, colour="lightblue") +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Suborder", palette="Accent")
+```
+
+
+### Phylogenetic path analysis
+
+- Building the models
+```{r}
+ppadata<-dataVT
+ppadata[,c(4,6:8)]<-log(ppadata[,c(4,6:8)])
+M<-define_model_set(null=c(),
+                    one=c(Thickness~SVL),
+                    two=c(V~BM),
+                    three=c(Thickness~V),
+                    four=c(Thickness~V+SVL),
+                    five=c(Thickness~V, V~BM),
+                    six=c(Thickness~SVL, V~BM),
+                    seven=c(Thickness~SVL+BM),
+                    eight=c(V~BM, Thickness~BM),
+                    nine=c(Thickness~V+BM),
+                    ten=c(Thickness~SVL+BM+V),
+                    eleven=c(Thickness~V+BM, V~BM),
+                    twelve=c(Thickness~SVL+BM, V~BM),
+                    thirteen=c(Thickness~BM),
+                    .common=c(BM~SVL, V~SVL))
+```
+
+- Plot all models and compile best model using CICc
+```{r}
+plot_model_set(M)
+result<-phylo_path(M, data=ppadata, tree=pruned.treeVT, model='lambda'); result
+s<-summary(result); s
+plot(s)
+averagemodel<-average(result)
+plot(averagemodel)
+```
+
+
+### Predictions of SVL and body mass – using phylogenetic eigenvectors maps (PEM)
+
+- Data and tree
+```{r}
+fossiltreePEM<-read.nexus("Lepidosaurtree.trees.nex")
+fossildataPEM<-read.table("Dataset1-lepidosaurs.txt",header=TRUE,stringsAsFactor=FALSE,)
+fossildataV<-subset(fossildataPEM, !is.na(V))
+fossildataV[,c(3:5,7:9)]<-log(fossildataV[,c(3:5,7:9)])
+```
+
+#### For SVL
+
+- Match the phylogeny and dataset
+```{r}
+treePEM<-drop.tip(fossiltreePEM, setdiff(fossiltreePEM$tip.label, fossildataV$Species))
+treedrop <- drop.tip(treePEM,fossildataV[is.na(fossildataV[,"SVL"]),"Species"])
+grloc <- getGraphLocations(treePEM,fossildataV[is.na(fossildataV[,"SVL"]),"Species"])
+sporder <- match(attr(grloc$x,"vlabel")[grloc$x$vertex$species],fossildataV[,"Species"])
+```
+
+- Build the PEM
+```{r}
+PEMfs <- list()
+PEMfs[["V"]] <- PEM.fitSimple(y=fossildataV[sporder,"SVL"],
+                    x=fossildataV[sporder,"V"],w=grloc$x,d="distance",sp="species",
+                    lower=0,upper=1)
+PEMfs[["none"]] <- PEM.fitSimple(y=fossildataV[sporder,"SVL"],
+                    x=NULL,w=grloc$x,d="distance",sp="species",lower=0,upper=1)
+for(m in c("V","none")) print(PEMfs[[m]]$optim$par)
+rm(m)
+```
+
+- Select the best model (with V as a co-predictor vs without co-predictors) based on AICc
+```{r}
+PEMAIC <- list()
+PEMAIC[["V"]] <- lmforwardsequentialAICc(y=fossildataV[sporder,"SVL"],
+                                         x=fossildataV[sporder,"V",drop=FALSE],object=PEMfs[["V"]])
+PEMAIC[["none"]] <- lmforwardsequentialAICc(y=fossildataV[sporder,"SVL"],object=PEMfs[["none"]])
+for(m in c("V","none"))
+  cat(m,summary(PEMAIC[[m]])$adj,PEMAIC[[m]]$AICc,"\n")
+rm(m)
+
+summary(PEMAIC[["V"]])
+```
+
+<i>The model with V as a co-predictor has the best fit.</i>
+
+- Predicting missing values for SVL
+```{r}
+tf<-list(V=identity, none=identity)
+m <- "V" ; atr <- tf[[m]](fossildataV[is.na(fossildataV[,"SVL"]),m,drop=FALSE])
+resultsPEM<-predict(object=PEMfs[[m]],targets=grloc,lmobject=PEMAIC[[m]],newdata=atr,interval="confidence")
+
+# Predicted SVL, with upper and lower limits of the confidence interval for the prediction:
+exp(resultsPEM$values); exp(resultsPEM$upper); exp(resultsPEM$lower)
+```
+
+<i>The code to predict missing values for body mass is identical to the one for SVL; simply replace 'SVL' with 'BM'.</i>
+
+- Plotting the regression for Egg volume ~ SVL with the value of SVL for <i>Antarcticoolithus</i> estimated from PEM
+```{r}
+data[1,7]<-6665.867
+dataV2<-subset(data, !is.na(V))
+
+ggplot(dataV2, aes(log(SVL), log(V), color=Suborder)) +
+  geom_point(size=4) +
+  xlab("ln snout-vent length (mm)") +
+  ylab("ln egg volume (mm3)") +
+  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue") +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Suborder", palette="Accent")
+```
+
+- Plotting the regression for Egg volume ~ Body mass with the value of body mass for <i>Antarcticoolithus</i> estimated from PEM
+```{r}
+data[1,8]<-456096.7
+dataV2<-subset(data, !is.na(V))
+
+ggplot(dataV2, aes(log(BM), log(V), color=Suborder)) +
+  geom_point(size=4) +
+  xlab("ln body mass (g)") +
+  ylab("ln egg volume (mm3)") +
+  geom_abline(intercept=5.050556, slope=0.619536, colour="lightblue") +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Suborder", palette="Set1")
+```
+
+
+### Phylogenetic ANOVA
+
+- Subsetting the data and tree, and compiling relative eggshell thickness (RT)
+with RT = (eggshell thickness / egg length)
+```{r}
+RT<-data$Thickness/data$L; data<-cbind(data, RT)
+dataA<-subset(data, !is.na(RT)&!is.na(OV))
+dataA$RT<-log(dataA$RT)
+anovatree<-drop.tip(tree, setdiff(tree$tip.label, rownames(dataA)))
+```
+
+#### ANOVA with 2 groups (oviparous and viviparous)
+
+- Subsetting the dataset and performing the ANOVA
+```{r}
+datANOVA<-as.data.frame(cbind(dataA$RT, dataA$OV), header=T)
+row.names(datANOVA)<-row.names(dataA); colnames(datANOVA)<-c("RT", "OV")
+datANOVA<-ReorderData(anovatree, datANOVA, taxa.names="row names")
+
+phylANOVA(anovatree, datANOVA$OV, datANOVA$RT, p.adj="BH")
+```
+
+- Boxplot of both groups
+```{r}
+ggplot(dataA, aes(x=OV, y=RT, fill=OV)) +
+  geom_boxplot() +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_fill_hue()
+
+log(data$RT)[1] # Value for Antarcticoolithus, intermediate between the groups
+```
+
+- Extract percentiles for each boxplot
+```{r}
+p2<-ggplot(dataA, aes(x=OV, y=RT, fill=OV)) + geom_boxplot()
+ggplot_build(p2)$data
+```
+
+#### ANOVA with 3 groups (oviparous and laid, oviparous and dissected from the oviduct, and viviparous)
+
+- Subsetting the dataset and performing the ANOVA
+```{r}
+datANOVA2<-as.data.frame(cbind(dataA$RT, dataA$Strategy), header=T)
+row.names(datANOVA2)<-row.names(dataA); colnames(datANOVA2)<-c("RT", "Strategy")
+datANOVA2<-ReorderData(anovatree, datANOVA2, taxa.names="row names")
+
+phylANOVA(anovatree, datANOVA2$Strategy, datANOVA2$RT, p.adj="BH")
+```
+
+- Boxplot of all groups
+```{r}
+ggplot(dataA, aes(x=Strategy, y=RT, fill=Strategy)) +
+  geom_boxplot() +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_fill_hue()
+```
+
+- Extract percentiles for each boxplot
+```{r}
+p2<-ggplot(dataA, aes(x=Strategy, y=RT, fill=Strategy)) + geom_boxplot()
+ggplot_build(p2)$data
+```
+
+
+## 2 – Amniote dataset
+
+This part requires the use of dataset 2 ("Dataset2-amniotes.txt"; see also Supplementary Table 3 in Legendre et al., 2020), and amniote phylogenetic tree ("Amniotetree.nex").
+
+- Loading and matching the data and tree
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+treeS<-read.nexus("Amniotetree.nex")
+treeS<-drop.tip(treeS, setdiff(treeS$tip.label, dataS$Taxon))
+dataS<-read.table("Dataset2-amniotes.txt", header=T, row.names="Taxon")
+Ws<-diag(vcv.phylo(treeS))
+```
+
+
+### PGLS – Eggshell thickness ~ Egg mass
+
+#### For hard-shelled eggs
+
+- Subset data and tree
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+datahard<-dataS[-c(50,86:88,93:95,115,118,120:145,147,149),]
+treehard<-drop.tip(treeS, setdiff(treeS$tip.label, datahard$Taxon))
+dataS<-read.table("Dataset2-amniotes.txt", header=T, row.names="Taxon")
+datahard<-dataS[-c(50,86:88,93:95,115,118,120:145,147,149),]
+Wh<-diag(vcv.phylo(treehard))
+```
+
+- Best fit for alpha parameter in OU model
+```{r}
+alpha <- seq(0, 1, 0.1)
+fit <- list()
+form <- log(Eggshell_thickness)~log(Egg_mass)
+for (i in seq_along(alpha)) {
+  cor <- corMartins(alpha[i], phy = treehard, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = datahard, na.action=na.exclude, weights=varFixed(~Wh), method = "ML")
+}
+sapply(fit, logLik)
+```
+
+- Best fit for g parameter in EB (Early Burst) model
+```{r}
+g <- seq(0.1, 1, 0.1)
+fit <- list()
+form <- log(Eggshell_thickness)~log(Egg_mass)
+for (i in seq_along(g)) {
+  cor <- corBlomberg(g[i], phy = treehard, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = datahard, na.action=na.exclude, weights=varFixed(~Wh), method = "ML")
+}
+sapply(fit, logLik)
+```
+
+- Building PGLS models and running model selection using AICc
+```{r}
+BM<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corBrownian(phy=treehard), weights=varFixed(~Wh), method="ML")
+OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corMartins(0.1, phy=treehard, fixed=T), weights=varFixed(~Wh), method="ML")
+Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corPagel(1, phy=treehard), weights=varFixed(~Wh), method="ML")
+EB<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corBlomberg(0.1, phy=treehard, fixed=T), weights=varFixed(~Wh), method="ML")
+OLS<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, method="ML")
+
+Cand.models = list()
+Cand.models[[1]] = BM
+Cand.models[[2]] = OU
+Cand.models[[3]] = Lambda
+Cand.models[[4]] = EB
+Cand.models[[5]] = OLS
+
+Modnames = paste(c("BM", "OU", "Lambda", "EB", "OLS"), sep = " ")
+aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
+summary(Lambda)
+```
+
+- Estimating the pseudo R-squared using caper
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+datahard<-dataS[-c(50,86:88,93:95,115,118,120:145,147,149),]
+datacomp<-comparative.data(phy=treehard, data=datahard, names.col="Taxon")
+pgls<-pgls(log(Eggshell_thickness)~log(Egg_mass), data=datacomp, lambda="ML")
+summary(pgls)
+```
+
+#### For soft-shelled eggs
+
+- Subset data and tree
+```{r}
+datasoft<-dataS[c(50,86:88,93,94,115,118,120:145,147,149),]
+treesoft<-drop.tip(treeS, setdiff(treeS$tip.label, datasoft$Taxon))
+dataS<-read.table("Dataset2-amniotes.txt", header=T, row.names="Taxon")
+datasoft<-dataS[c(50,86:88,93,94,115,118,120:145,147,149),]
+Ws<-diag(vcv.phylo(treesoft))
+```
+
+- Best fit for alpha parameter in OU model
+```{r}
+alpha <- seq(0, 1, 0.1)
+fit <- list()
+form <- log(Eggshell_thickness)~log(Egg_mass)
+for (i in seq_along(alpha)) {
+  cor <- corMartins(alpha[i], phy = treesoft, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = datasoft, na.action=na.exclude, weights=varFixed(~Ws), method = "ML")
+}
+sapply(fit, logLik)
+```
+
+- Best fit for g parameter in EB model
+```{r}
+g <- seq(0.1, 1, 0.1)
+fit <- list()
+form <- log(Eggshell_thickness)~log(Egg_mass)
+for (i in seq_along(g)) {
+  cor <- corBlomberg(g[i], phy = treesoft, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = datasoft, na.action=na.exclude, weights=varFixed(~Ws), method = "ML")
+}
+sapply(fit, logLik)
+```
+
+- Building PGLS models and running model selection using AICc
+```{r}
+BM<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corBrownian(phy=treesoft), weights=varFixed(~Ws), method="ML")
+OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corMartins(1, phy=treesoft), weights=varFixed(~Ws), method="ML")
+Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corPagel(0.2, phy=treesoft), weights=varFixed(~Ws), method="ML")
+EB<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corBlomberg(0.1, phy=treesoft, fixed=T), weights=varFixed(~Ws), method="ML")
+OLS<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, method="ML")
+
+Cand.models = list()
+Cand.models[[1]] = BM
+Cand.models[[2]] = OU
+Cand.models[[3]] = Lambda
+Cand.models[[4]] = EB
+Cand.models[[5]] = OLS
+
+Modnames = paste(c("BM", "OU", "Lambda", "EB", "OLS"), sep = " ")
+aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
+summary(Lambda)
+```
+
+- Estimating the pseudo R-squared using caper
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+datasoft<-dataS[c(50,86:88,93,94,115,118,120:145,147,149),]
+datacomp<-comparative.data(phy=multi2di(treesoft), data=datasoft, names.col="Taxon")
+pgls<-pgls(log(Eggshell_thickness)~log(Egg_mass), data=datacomp, lambda="ML")
+summary(pgls)
+```
+
+#### Plot with both regression lines (hard-shelled and soft-shelled)
+
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+ggplot(dataS, aes(log(Egg_mass), log(Eggshell_thickness), colour=Clade)) +
+  geom_point(size=4) +
+  xlab("ln egg mass (g)") +
+  ylab("ln calcareous layer thickness (µm)") +
+  geom_abline(intercept=4.321066, slope=0.439690, colour="turquoise", size=1.3) +
+  geom_abline(intercept=2.1224777, slope=0.3930565, colour="red", size=1.3) +
+  theme(panel.background = element_rect(fill="black")) +
+  theme(axis.text=element_text(size=15),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_colour_brewer("Group", palette="Set1")
+```
+
+
+### Ancestral state reconstruction 
+
+- For ratio (Calcareous layer thickness / Egg mass), using 'fastAnc'
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T); dataS<-dataS[-95,]
+treeplot<-drop.tip(treeS, setdiff(treeS$tip.label, dataS$Taxon))
+dataS<-read.table("Dataset2-amniotes.txt", header=T, row.names="Taxon"); dataS<-dataS[-95,]
+dataplot=as.matrix(dataS[,3]); names(dataplot)<-rownames(dataS); colnames(dataplot)<-"CL_thickness"
+dataplot<-log10(dataplot)
+
+fit<-fastAnc(treeplot,dataplot,vars=T,CI=T) # Ancestral states for each node
+obj<-contMap(treeplot,dataplot,plot=F)
+
+plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))))
+plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), type="fan", fsize=0.4,lwd=4)
+```
+
+- Same as above, but with an ultrametric tree, as shown in Fig. 3 of Legendre et al. (2020)
+```{r}
+treeplot<-force.ultrametric(treeplot)
+fit<-fastAnc(treeplot,dataplot,vars=T,CI=T) # Ancestral states for each node
+obj<-contMap(treeplot,dataplot,plot=F)
+
+plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))))
+```
+
+- For presence/absence of the prismatic layer, using 'make.simmap'
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+treeS<-read.nexus("Amniotetree.nex")
+treeS<-drop.tip(treeS, setdiff(treeS$tip.label, dataS$Taxon))
+prismatic<-dataS[,5]; names(prismatic)<-dataS$Taxon
+cols<-setNames(c("royalblue","red3"),levels(prismatic))
+
+mtree<-make.simmap(treeS, prismatic, model="ER")
+plot(mtree,cols,type="fan",fsize=0.5,ftype="i")
+add.simmap.legend(colors=cols,prompt=FALSE,x=0.9*par()$usr[1],
+                  y=0.8*par()$usr[3],fsize=0.8)
+
+# with 1000 simulations of stochastic character maps from the data:
+mtrees<-make.simmap(treeS, prismatic, model="ER", nsim=1000)
+par(mfrow=c(10,10))
+null<-sapply(mtrees,plotSimmap,colors=cols,lwd=1,ftype="off")
+pd<-summary(mtrees); pd
+par(mfrow=c(1,1))
+plot(pd,fsize=0.6,ftype="i",colors=cols,ylim=c(-2,Ntip(treeS)))
+add.simmap.legend(colors=cols[2:1],prompt=FALSE,x=0,y=-4,vertical=FALSE)
+
+# density map of the above
+objprism<-densityMap(mtrees,states=levels(prismatic)[2:1],plot=FALSE)
+n<-length(objprism$cols)
+objprism$cols[1:n]<-colorRampPalette(c("royalblue","red3"))(n)
+plot(objprism,size=c(0.6,1))
+```
+
+
+### Boxplot for ratio (Calcareous layer thickness / Egg mass)
+
+```{r}
+dataS<-read.table("Dataset2-amniotes.txt", header=T)
+RTM<-dataS$Eggshell_thickness/dataS$Egg_mass
+dataS<-cbind(dataS, RTM)
+dataSboxplot<-dataS %>% filter(!Clade=="Test")
+
+ggplot(dataSboxplot, aes(x=Clade, y=log(RTM), fill=Clade)) + 
+  geom_boxplot() +
+  theme(panel.background = element_rect(fill="white")) +
+  theme(axis.text=element_text(size=6, angle = 90),
+        axis.title=element_text(size=15),
+        legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
+  scale_fill_brewer(palette="Set1")
+```
+
+- Extract percentiles for each boxplot
+```{r}
+p<-ggplot(dataSboxplot, aes(x=Clade, y=log(RTM), fill=Clade)) + 
+  geom_boxplot()
+ggplot_build(p)$data
+```

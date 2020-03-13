@@ -8,12 +8,12 @@ protocol can be found in the online Supplementary Information of the paper)
  
 - 'SupplementaryCode_Legendreetal2020.Rmd': original R script used to generate the HTML file, in Markdown format
 
-- 'Dataset1–lepidosaurs.txt': dataset 1, containing egg measurements, snout-vent length, and body mass for 259 species of lepidosaurs
+- 'Dataset1–lepidosaurs.txt': dataset 1 in txt format, containing egg measurements, snout-vent length, and body mass for 259 species of lepidosaurs
 (Supplementary Table 1 in Legendre et al., 2020)
 
-- 'Lepidosaurtree.trees.nex': phylogenetic tree for dataset 1
+- 'Lepidosaurtree.trees.nex': phylogenetic tree for dataset 1, in NEXUS format
 
-- 'Dataset2-amniotes.txt': dataset 2, containing egg measurements for 148 species of amniotes
+- 'Dataset2-amniotes.txt': dataset 2 in txt format, containing egg measurements for 148 species of amniotes
 (Supplementary Table 3 in Legendre et al., 2020)
 
-- 'Amniotetree.nex': phylogenetic tree for dataset 2
+- 'Amniotetree.nex': phylogenetic tree for dataset 2, in NEXUS format

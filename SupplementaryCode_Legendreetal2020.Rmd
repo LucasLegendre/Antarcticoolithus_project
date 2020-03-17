@@ -1,7 +1,7 @@
 ---
 title: "Supplementary code – Legendre et al. (2020)"
 author: "Lucas Legendre"
-date: "3/12/2020"
+date: "3/16/2020"
 output:
   html_document: default
   pdf_document: default

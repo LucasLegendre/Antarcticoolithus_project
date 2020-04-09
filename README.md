@@ -1,5 +1,5 @@
 # Antarcticoolithus_project
-Contains datasets, phylogenetic trees, and R code related to analyses for the <i>Antarcticoolithus</i> project, as published in Legendre et al. (2020)
+Contains datasets, phylogenetic trees, and R code related to analyses for the <i>Antarcticoolithus</i> project, as published in Legendre et al. (2020).
 
 File description:
 

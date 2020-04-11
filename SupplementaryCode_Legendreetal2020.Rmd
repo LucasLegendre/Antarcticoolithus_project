@@ -655,7 +655,6 @@ fit<-fastAnc(treeplot,dataplot,vars=T,CI=T) # Ancestral states for each node
 obj<-contMap(treeplot,dataplot,plot=F)
 
 plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), fsize=0.4,lwd=4)
-plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), type="fan", fsize=0.4,lwd=4)
 ```
 
 - Same as above, but with an ultrametric tree, as shown in Fig. 3 of Legendre et al. (2020)
@@ -677,7 +676,7 @@ prismatic<-dataS[,5]; names(prismatic)<-dataS$Taxon
 cols<-setNames(c("royalblue","red3"),levels(prismatic))
 
 mtree<-make.simmap(treeS, prismatic, model="ER")
-plot(mtree,cols,type="fan",fsize=0.5,ftype="i")
+plot(mtree,cols,fsize=0.5,ftype="i")
 add.simmap.legend(colors=cols,prompt=FALSE,x=0.9*par()$usr[1],
                   y=0.8*par()$usr[3],fsize=0.8)
 

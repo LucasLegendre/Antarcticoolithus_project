@@ -1,10 +1,14 @@
 ---
 title: "Supplementary code – Legendre et al. (2020)"
 author: "Lucas Legendre"
-date: "04/14/2020"
+date: "04/23/2020"
 output:
-  html_document: default
-  pdf_document: default
+  html_document:
+     toc: true
+     toc_float:
+      collapsed: false
+      smooth_scroll: false
+     df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -12,12 +16,12 @@ knitr::opts_chunk$set(error = TRUE)
 knitr::opts_knit$set(root.dir = '/Users/lucasl/Documents/GitHub/Antarcticoolithus_project')
 ```
 
-Compiled under R version 3.6.2 (2019-12-12)
+Compiled under R version 3.6.3 (2020-02-29)
 
-WARNING: edit the working directory to your preferred folder
+<b>WARNING</b>: edit the working directory to your preferred folder.
 
-This document details all analyses performed in R for the study:
-Legendre, L. J., Rubilar-Rogers, D., Musser, G. M., Davis, S. N., Otero, R., Vargas, A. O., and Clarke, J. A. 2020. A giant soft-shelled egg from the Late Cretaceous of Antarctica. <i>Nature</i>.
+This document details all analyses performed in R for the study:  
+Legendre, L. J., D. Rubilar-Rogers, G. M. Musser, S. N. Davis, R. A. Otero, A. O. Vargas, and J. A. Clarke. 2020. A giant soft-shelled egg from the Late Cretaceous of Antarctica. <i>Nature</i>.
 
 For more information regarding the study, datasets, and analyses, please refer to the Supplementary Information of this paper. If you have any additional questions, feel free to email me at <lucasjlegendre@gmail.com>.
 
@@ -123,7 +127,7 @@ lillie.test(residuals(Newlambda))
 lillie.test(chol(solve(vcv(newtree)))%*%residuals(Newlambda))
 ```
 
-- Estimating the pseudo R-squared using caper
+- Estimating the pseudo R-squared using `caper`
 ```{r}
 #newlambda:
 datacomp<-comparative.data(phy=newtree, data=newdata2, names.col="Species")
@@ -549,7 +553,7 @@ aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
 summary(Lambda)
 ```
 
-- Estimating the pseudo R-squared using caper
+- Estimating the pseudo R-squared using `caper`
 ```{r}
 dataS<-read.table("Dataset2-amniotes.txt", header=T)
 datahard<-dataS[-c(50,86:88,93:95,115,118,120:145,147,149),]
@@ -613,7 +617,7 @@ aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
 summary(Lambda)
 ```
 
-- Estimating the pseudo R-squared using caper
+- Estimating the pseudo R-squared using `caper`
 ```{r}
 dataS<-read.table("Dataset2-amniotes.txt", header=T)
 datasoft<-dataS[c(50,86:88,93,94,115,118,120:145,147,149),]
@@ -643,7 +647,7 @@ ggplot(dataS, aes(log(Egg_mass), log(Eggshell_thickness), colour=Clade)) +
 
 ### Ancestral state reconstruction 
 
-- For ratio (Calcareous layer thickness / Egg mass), using 'fastAnc'
+- For ratio (Calcareous layer thickness / Egg mass), using `fastAnc`
 ```{r}
 dataS<-read.table("Dataset2-amniotes.txt", header=T); dataS<-dataS[-95,]
 treeplot<-drop.tip(treeS, setdiff(treeS$tip.label, dataS$Taxon))
@@ -666,7 +670,7 @@ obj<-contMap(treeplot,dataplot,plot=F)
 plot(setMap(obj, colors=rev(brewer.pal(10, "Spectral"))), fsize=0.4,lwd=4)
 ```
 
-- For presence/absence of the prismatic layer, using 'make.simmap'
+- For presence/absence of the prismatic layer, using `make.simmap`
 ```{r}
 dataS<-read.table("Dataset2-amniotes.txt", header=T)
 dataS<-dataS[-95,]

@@ -600,8 +600,8 @@ sapply(fit, logLik)
 - Building PGLS models and running model selection using AICc
 ```{r}
 BM<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corBrownian(phy=treesoft), weights=varFixed(~Ws), method="ML")
-OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corMartins(1, phy=treesoft), weights=varFixed(~Ws), method="ML")
-Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corPagel(0.2, phy=treesoft), weights=varFixed(~Ws), method="ML")
+OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corMartins(0.2, phy=treesoft), weights=varFixed(~Ws), method="ML")
+Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corPagel(1, phy=treesoft), weights=varFixed(~Ws), method="ML")
 EB<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corBlomberg(0.1, phy=treesoft, fixed=T), weights=varFixed(~Ws), method="ML")
 OLS<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, method="ML")
 
@@ -614,16 +614,17 @@ Cand.models[[5]] = OLS
 
 Modnames = paste(c("BM", "OU", "Lambda", "EB", "OLS"), sep = " ")
 aictab(cand.set = Cand.models, modnames = Modnames, sort = T)
-summary(Lambda)
+summary(EB)
 ```
 
-- Estimating the pseudo R-squared using `caper`
+- Estimating the pseudo R-squared by compiling an ANOVA with the EB model and a null model
 ```{r}
-dataS<-read.table("Dataset2-amniotes.txt", header=T)
-datasoft<-dataS[c(50,86:88,93,94,115,118,120:145,147,149),]
-datacomp<-comparative.data(phy=multi2di(treesoft), data=datasoft, names.col="Taxon")
-pgls<-pgls(log(Eggshell_thickness)~log(Egg_mass), data=datacomp, lambda="ML")
-summary(pgls)
+# R-squared
+EB2<-gls(log(Eggshell_thickness)~1, data=datasoft, correlation=corBlomberg(0.1, phy=treesoft, fixed=T), weights=varFixed(~Ws), method="ML")
+1 - (EB$sigma/EB2$sigma)^2
+
+# P-value
+anova(EB2, EB)
 ```
 
 #### Plot with both regression lines (hard-shelled and soft-shelled)
@@ -635,7 +636,7 @@ ggplot(dataS, aes(log(Egg_mass), log(Eggshell_thickness), colour=Clade)) +
   xlab("ln egg mass (g)") +
   ylab("ln calcareous layer thickness (µm)") +
   geom_abline(intercept=4.321066, slope=0.439690, colour="turquoise", size=1.3) +
-  geom_abline(intercept=2.1224777, slope=0.3930565, colour="red", size=1.3) +
+  geom_abline(intercept=2.0474668, slope=0.4036309, colour="red", size=1.3) +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),

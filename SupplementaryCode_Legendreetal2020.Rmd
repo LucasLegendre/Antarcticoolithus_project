@@ -21,7 +21,7 @@ Compiled under R version 3.6.3 (2020-02-29)
 <b>WARNING</b>: edit the working directory to your preferred folder.
 
 This document details all analyses performed in R for the study:  
-Legendre, L. J., D. Rubilar-Rogers, G. M. Musser, S. N. Davis, R. A. Otero, A. O. Vargas, and J. A. Clarke. 2020. A giant soft-shelled egg from the Late Cretaceous of Antarctica. <i>Nature</i>.
+Legendre, L. J., D. Rubilar-Rogers, G. M. Musser, S. N. Davis, R. A. Otero, A. O. Vargas, and J. A. Clarke. 2020. A giant soft-shelled egg from the Late Cretaceous of Antarctica. <i>Nature</i> <b>583</b>, 411–414.
 
 For more information regarding the study, datasets, and analyses, please refer to the Supplementary Information of this paper. If you have any additional questions, feel free to email me at <lucasjlegendre@gmail.com>.
 
@@ -66,10 +66,10 @@ data<-read.table("Dataset1-lepidosaurs.txt", header=T, row.names = "Species"); d
 ```
 
 - Best fit for alpha parameter in OU (Ornstein-Uhlenbeck) model
-```{r}
+```{r, message=FALSE}
 alpha <- seq(0, 1, 0.1)
 fit <- list()
-form <- log(V)~log(SVL)
+form<-log(V)~log(SVL)
 for (i in seq_along(alpha)) {
   cor <- corMartins(alpha[i], phy = pruned.tree, fixed = T)
   fit[[i]] <- gls(form, correlation = cor, data = data, na.action=na.exclude, method = "ML")
@@ -77,12 +77,24 @@ for (i in seq_along(alpha)) {
 sapply(fit, logLik)
 ```
 
+- Best fit for g parameter in EB (Early Burst) model
+```{r, message=FALSE}
+g <- seq(0.1, 1, 0.1)
+fit <- list()
+form <- log(V)~log(SVL)
+for (i in seq_along(g)) {
+  cor <- corBlomberg(g[i], phy = pruned.tree, fixed = T)
+  fit[[i]] <- gls(form, correlation = cor, data = data, na.action=na.exclude, method = "ML")
+}
+sapply(fit, logLik)
+```
+
 - Building PGLS models and running model selection using AICc
-```{r}
+```{r, message=FALSE}
 BM<-gls(log(V)~log(SVL), data=dataV, correlation=corBrownian(phy=pruned.tree), method="ML")
-OU<-gls(log(V)~log(SVL), data=dataV, correlation=corMartins(1, phy=pruned.tree, fixed=T), method="ML")
+OU<-gls(log(V)~log(SVL), data=dataV, correlation=corMartins(0.1, phy=pruned.tree, fixed=T), method="ML")
 Lambda<-gls(log(V)~log(SVL), data=dataV, correlation=corPagel(1, phy=pruned.tree), method="ML")
-EB<-gls(log(V)~log(SVL), data=dataV, correlation=corBlomberg(0.1, phy=pruned.tree), method="ML")
+EB<-gls(log(V)~log(SVL), data=dataV, correlation=corBlomberg(0.1, phy=pruned.tree, fixed=T), method="ML")
 OLS<-gls(log(V)~log(SVL), data=dataV, method="ML")
 
 Cand.models = list()
@@ -109,7 +121,7 @@ lillie.test(chol(solve(vcv(pruned.tree)))%*%residuals(Lambda))
 ```
 
 - Removing outliers and building a new model without them
-```{r}
+```{r, message=FALSE}
 which(res>4); which(res<(-2.5))
 newdata<-dataV[-c(89,168,222),]
 newdata2<-data2V[-c(89,168,222),]
@@ -128,7 +140,7 @@ lillie.test(chol(solve(vcv(newtree)))%*%residuals(Newlambda))
 ```
 
 - Estimating the pseudo R-squared using `caper`
-```{r}
+```{r, message=FALSE}
 #newlambda:
 datacomp<-comparative.data(phy=newtree, data=newdata2, names.col="Species")
 pgls<-pgls(log(V)~log(SVL), data=datacomp, lambda="ML")
@@ -140,7 +152,7 @@ pgls<-pgls(log(V)~log(SVL), data=datacompl, lambda="ML")
 summary(pgls)
 ```
 
-<i>Not much difference between the two models, assumptions of normality are not met in either of them – we use <b>lambda</b> instead of <b>newlambda</b> for the plot.</i>
+<i>Not much difference between the two models, assumptions of normality are not met in either of them – we use <b>Lambda</b> instead of <b>Newlambda</b> for the plot.</i>
 
 - Plot of the regression
 ```{r}
@@ -148,7 +160,7 @@ ggplot(dataV, aes(log(SVL), log(V), color=Suborder)) +
 geom_point(size=4) +
   xlab("ln snout-vent length (mm)") +
   ylab("ln egg volume (mm3)") +
-  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue", size=1.3) +
+  geom_abline(intercept=Lambda$coefficients[1], slope=Lambda$coefficients[2], colour="lightblue", size=1.3) +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -168,7 +180,7 @@ ggplot(dataV2, aes(log(SVL), log(V), color=Suborder)) +
   geom_point(size=4) +
   xlab("ln snout-vent length (mm)") +
   ylab("ln egg volume (mm3)") +
-  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue") +
+  geom_abline(intercept=Lambda$coefficients[1], slope=Lambda$coefficients[2], colour="lightblue") +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -180,7 +192,7 @@ ggplot(dataV2, aes(log(SVL), log(V), color=Suborder)) +
 <i>Eggshell thickness ~ body mass is not detailed here, since the code is virtually identical – only variable names and regression coefficients for the plot and estimation are different.</i>
 
 - Estimating the body mass of <i>Antarcticoolithus</i> using the allometric equation of PGLS, including it in the dataset, then in the plot
-```{r}
+```{r, message=FALSE}
 LambdaBM<-gls(log(V)~log(BM), data=dataV, correlation=corPagel(1, phy=pruned.tree), method="ML")
 summary(LambdaBM)
 
@@ -193,7 +205,7 @@ ggplot(dataV2, aes(log(BM), log(V), color=Suborder)) +
   geom_point(size=4) +
   xlab("ln body mass (g)") +
   ylab("ln egg volume (mm3)") +
-  geom_abline(intercept=5.050556, slope=0.619536, colour="lightblue") +
+  geom_abline(intercept=LambdaBM$coefficients[1], slope=LambdaBM$coefficients[2], colour="lightblue") +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -213,7 +225,7 @@ dataVT<-subset(data, !is.na(Thickness)&!is.na(V)); dataVT<-dataVT[-1,]
 ```
 
 - Building PGLS models and running model selection using AICc
-```{r}
+```{r, message=FALSE}
 BMVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corBrownian(phy=pruned.treeVT), method="ML")
 OUVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corMartins(1, phy=pruned.treeVT), method="ML")
 LambdaVT<-gls(log(Thickness)~log(V), data=dataVT, correlation=corPagel(1, phy=pruned.treeVT), method="ML")
@@ -233,7 +245,7 @@ summary(EBVT)
 ```
 
 - Testing for normality
-```{r}
+```{r, message=FALSE}
 lillie.test(residuals(EBVT))
 lillie.test(chol(solve(vcv(pruned.treeVT)))%*%residuals(EBVT))
 
@@ -246,7 +258,7 @@ qqline(res)
 
 
 - Removing outliers and building a new model without them
-```{r}
+```{r, message=FALSE}
 which(res<(-2)); which(res>2.5)
 newdataVT<-dataVT[-c(19,45),]
 newdataVT2<-dataVT2[-c(19,45),]
@@ -271,7 +283,7 @@ ggplot(newdataVT, aes(log(V), log(Thickness), color=Suborder)) +
   geom_point(size=4) +
   xlab("ln egg volume (mm3)") +
   ylab("ln eggshell thickness (µm)") +
-  geom_abline(intercept=2.1246786, slope=0.3209485, colour="lightblue") +
+  geom_abline(intercept=NewEBVT$coefficients[1], slope=NewEBVT$coefficients[2], colour="lightblue") +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -383,7 +395,7 @@ ggplot(dataV2, aes(log(SVL), log(V), color=Suborder)) +
   geom_point(size=4) +
   xlab("ln snout-vent length (mm)") +
   ylab("ln egg volume (mm3)") +
-  geom_abline(intercept=-0.7990941, slope=1.6708400, colour="lightblue") +
+  geom_abline(intercept=Lambda$coefficients[1], slope=Lambda$coefficients[2], colour="lightblue") +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -401,7 +413,7 @@ ggplot(dataV2, aes(log(BM), log(V), color=Suborder)) +
   geom_point(size=4) +
   xlab("ln body mass (g)") +
   ylab("ln egg volume (mm3)") +
-  geom_abline(intercept=5.050556, slope=0.619536, colour="lightblue") +
+  geom_abline(intercept=LambdaBM$coefficients[1], slope=LambdaBM$coefficients[2], colour="lightblue") +
   theme(panel.background = element_rect(fill="black")) +
   theme(axis.text=element_text(size=15),
         axis.title=element_text(size=15),
@@ -510,7 +522,7 @@ Wh<-diag(vcv.phylo(treehard))
 ```
 
 - Best fit for alpha parameter in OU model
-```{r}
+```{r, message=FALSE}
 alpha <- seq(0, 1, 0.1)
 fit <- list()
 form <- log(Eggshell_thickness)~log(Egg_mass)
@@ -522,7 +534,7 @@ sapply(fit, logLik)
 ```
 
 - Best fit for g parameter in EB (Early Burst) model
-```{r}
+```{r, message=FALSE}
 g <- seq(0.1, 1, 0.1)
 fit <- list()
 form <- log(Eggshell_thickness)~log(Egg_mass)
@@ -534,7 +546,7 @@ sapply(fit, logLik)
 ```
 
 - Building PGLS models and running model selection using AICc
-```{r}
+```{r, message=FALSE}
 BM<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corBrownian(phy=treehard), weights=varFixed(~Wh), method="ML")
 OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corMartins(0.1, phy=treehard, fixed=T), weights=varFixed(~Wh), method="ML")
 Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datahard, correlation=corPagel(1, phy=treehard), weights=varFixed(~Wh), method="ML")
@@ -574,7 +586,7 @@ Ws<-diag(vcv.phylo(treesoft))
 ```
 
 - Best fit for alpha parameter in OU model
-```{r}
+```{r, message=FALSE}
 alpha <- seq(0, 1, 0.1)
 fit <- list()
 form <- log(Eggshell_thickness)~log(Egg_mass)
@@ -586,7 +598,7 @@ sapply(fit, logLik)
 ```
 
 - Best fit for g parameter in EB model
-```{r}
+```{r, message=FALSE}
 g <- seq(0.1, 1, 0.1)
 fit <- list()
 form <- log(Eggshell_thickness)~log(Egg_mass)
@@ -598,7 +610,7 @@ sapply(fit, logLik)
 ```
 
 - Building PGLS models and running model selection using AICc
-```{r}
+```{r, message=FALSE}
 BM<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corBrownian(phy=treesoft), weights=varFixed(~Ws), method="ML")
 OU<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corMartins(0.2, phy=treesoft), weights=varFixed(~Ws), method="ML")
 Lambda<-gls(log(Eggshell_thickness)~log(Egg_mass), data=datasoft, correlation=corPagel(1, phy=treesoft), weights=varFixed(~Ws), method="ML")
@@ -618,7 +630,7 @@ summary(EB)
 ```
 
 - Estimating the pseudo R-squared by compiling an ANOVA with the EB model and a null model
-```{r}
+```{r, message=FALSE}
 # R-squared
 EB2<-gls(log(Eggshell_thickness)~1, data=datasoft, correlation=corBlomberg(0.1, phy=treesoft, fixed=T), weights=varFixed(~Ws), method="ML")
 1 - (EB$sigma/EB2$sigma)^2
